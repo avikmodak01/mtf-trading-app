@@ -1,9 +1,8 @@
 // Reporting Service for MTF Trading Application
 // Handles data aggregation, filtering, and report generation
 
-import { Trade, Configuration } from '../types';
+import { Trade } from '../types';
 import { supabase } from '../lib/supabase';
-import { formatCurrency } from '../utils/calculations';
 
 export interface ReportPeriod {
   label: string;

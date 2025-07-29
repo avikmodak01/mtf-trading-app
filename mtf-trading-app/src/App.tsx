@@ -67,7 +67,7 @@ function App() {
     );
 
     return () => subscription?.unsubscribe();
-  }, []);
+  }, [user]);
 
   const loadUserData = async (userId: string) => {
     console.log('Loading user data for:', userId);

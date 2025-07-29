@@ -8,7 +8,7 @@ import {
   SummaryReportData 
 } from '../services/reportingService';
 import { formatCurrency } from '../utils/calculations';
-import { BarChart3, Download, Calendar, DollarSign, TrendingUp, TrendingDown, PieChart, FileText } from 'lucide-react';
+import { BarChart3, Download, Calendar, DollarSign, TrendingUp, FileText } from 'lucide-react';
 
 type ReportType = 'summary' | 'pl' | 'interest' | 'tax';
 
@@ -37,7 +37,7 @@ const Reports: React.FC = () => {
     if (selectedPeriod && activeReportType !== 'summary') {
       loadReportData();
     }
-  }, [selectedPeriod, activeReportType]);
+  }, [selectedPeriod, activeReportType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSummaryReport = async () => {
     setLoading(true);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Trade, BudgetConfig } from '../types';
 import { formatCurrency, formatPercentage } from '../utils/calculations';
-import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react';
+import { TrendingUp, TrendingDown, PieChart } from 'lucide-react';
 
 interface DashboardProps {
   trades: Trade[];
