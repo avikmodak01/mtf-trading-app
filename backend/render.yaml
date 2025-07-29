@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: mtf-trading-backend
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python app.py"
+    envVars:
+      - key: FLASK_DEBUG
+        value: false
+      - key: PORT
+        value: 10000
+    autoDeploy: false
