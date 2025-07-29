@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import yfinance as yf
+import NseUtility
 import os
 from datetime import datetime, timedelta
 import logging
@@ -12,6 +13,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# Initialize NSE utility
+try:
+    nse = NseUtility.NseUtils()
+    logger.info("NSE Utility initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize NSE Utility: {e}")
+    nse = None
 
 # Simple in-memory cache for stock prices
 price_cache = {}
@@ -55,6 +64,55 @@ def cache_price(symbol, data):
     price_cache[symbol] = (data, time.time())
     logger.info(f"Cached price for {symbol}")
 
+def get_nse_stock_price(symbol):
+    """Get stock price using NSE utility"""
+    try:
+        # Clean symbol - NSE utility expects symbol without .NS suffix
+        clean_symbol = symbol.replace('.NS', '').replace('.BO', '').upper().strip()
+        
+        logger.info(f"Fetching NSE price for: {clean_symbol}")
+        
+        # Get price info from NSE
+        price_data = nse.price_info(clean_symbol)
+        
+        if not price_data:
+            logger.warning(f"No price data returned from NSE for {clean_symbol}")
+            return None
+        
+        # Convert NSE data format to our API format
+        market_data = {
+            "symbol": f"{clean_symbol}.NS",
+            "current_price": float(price_data.get('LastTradedPrice', 0)),
+            "currency": "INR",
+            "market_state": "REGULAR",  # NSE doesn't provide this directly
+            "exchange": "NSE",
+            "company_name": clean_symbol,  # NSE doesn't provide company name in price_info
+            "last_updated": datetime.now().isoformat(),
+            "data_source": "nse"  # Mark as NSE source
+        }
+        
+        # Add additional fields if available
+        if price_data.get('PreviousClose'):
+            market_data['previous_close'] = float(price_data['PreviousClose'])
+            market_data['change'] = float(price_data.get('Change', 0))
+            market_data['change_percent'] = float(price_data.get('PercentChange', 0))
+        
+        if price_data.get('High'):
+            market_data['day_high'] = float(price_data['High'])
+        
+        if price_data.get('Low'):
+            market_data['day_low'] = float(price_data['Low'])
+        
+        # NSE doesn't provide volume in price_info, but we can set VWAP if available
+        if price_data.get('VWAP'):
+            market_data['vwap'] = float(price_data['VWAP'])
+        
+        return market_data
+        
+    except Exception as e:
+        logger.error(f"Error fetching NSE price for {symbol}: {str(e)}")
+        return None
+
 # Configure CORS with specific settings for React frontend
 # Allow both localhost (development) and production domains
 allowed_origins = [
@@ -91,6 +149,7 @@ def health_check():
 def get_stock_price(symbol):
     """
     Get current market price for a stock symbol
+    Uses NSE as primary source, yfinance as fallback
     Supports Indian stocks with .NS suffix for NSE and .BO for BSE
     """
     try:
@@ -108,7 +167,27 @@ def get_stock_price(symbol):
         
         logger.info(f"Fetching fresh price for symbol: {symbol}")
         
-        # Create ticker object
+        market_data = None
+        
+        # Try NSE first if available
+        if nse is not None:
+            try:
+                logger.info(f"Attempting NSE fetch for: {symbol}")
+                market_data = get_nse_stock_price(symbol)
+                if market_data:
+                    logger.info(f"✅ Successfully fetched from NSE: {symbol} = {market_data['current_price']}")
+                    # Cache the result
+                    cache_price(symbol, market_data)
+                    return jsonify(market_data)
+                else:
+                    logger.warning(f"NSE returned no data for {symbol}, trying yfinance fallback")
+            except Exception as e:
+                logger.warning(f"NSE fetch failed for {symbol}: {str(e)}, trying yfinance fallback")
+        else:
+            logger.info("NSE utility not available, using yfinance directly")
+        
+        # Fallback to yfinance
+        logger.info(f"Using yfinance fallback for: {symbol}")
         ticker = yf.Ticker(symbol)
         
         # Get current price and basic info
@@ -132,7 +211,7 @@ def get_stock_price(symbol):
                 current_price = hist['Close'].iloc[-1]
         
         if current_price is None:
-            return jsonify({"error": f"Could not fetch price for {symbol}"}), 404
+            return jsonify({"error": f"Could not fetch price for {symbol} from any source"}), 404
         
         # Get additional market data
         market_data = {
@@ -143,6 +222,7 @@ def get_stock_price(symbol):
             "exchange": info.get('exchange', 'NSE'),
             "company_name": info.get('longName', info.get('shortName', symbol)),
             "last_updated": datetime.now().isoformat(),
+            "data_source": "yfinance"  # Mark as fallback source
         }
         
         # Add optional fields if available
@@ -160,7 +240,7 @@ def get_stock_price(symbol):
         if 'volume' in info:
             market_data['volume'] = info['volume']
         
-        logger.info(f"Successfully fetched price for {symbol}: {current_price}")
+        logger.info(f"✅ Successfully fetched from yfinance fallback: {symbol} = {current_price}")
         
         # Cache the result
         cache_price(symbol, market_data)
