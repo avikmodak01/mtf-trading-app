@@ -20,17 +20,52 @@ import threading
 import time
 
 def init_nse_worker():
-    """Worker function to initialize NSE"""
+    """Worker function to initialize NSE with multiple strategies"""
     global nse
+    
+    # Strategy 1: Try simple NSE (lightweight, server-friendly)
     try:
-        logger.info("🔄 Attempting to initialize NSE Utility...")
+        logger.info("🔄 Attempting to initialize Simple NSE...")
+        import NseSimple
+        nse_candidate = NseSimple.NseSimple()
+        
+        # Test connection
+        if nse_candidate.test_connection():
+            nse = nse_candidate
+            logger.info("✅ Simple NSE Utility initialized successfully")
+            return True
+        else:
+            logger.warning("⚠️  Simple NSE connection test failed")
+    except Exception as e:
+        logger.warning(f"⚠️  Simple NSE initialization failed: {e}")
+    
+    # Strategy 2: Try original NSE utility (works great locally)
+    try:
+        logger.info("🔄 Attempting to initialize Original NSE Utility...")
         import NseUtility
         nse = NseUtility.NseUtils()
-        logger.info("✅ NSE Utility initialized successfully")
+        logger.info("✅ Original NSE Utility initialized successfully")
         return True
     except Exception as e:
-        logger.warning(f"⚠️  NSE initialization failed: {e}")
-        return False
+        logger.warning(f"⚠️  Original NSE initialization failed: {e}")
+    
+    # Strategy 3: Try optimized NSE as last resort
+    try:
+        logger.info("🔄 Attempting to initialize Optimized NSE...")
+        import NseOptimized
+        nse_candidate = NseOptimized.NseOptimized()
+        
+        # Test connection
+        if nse_candidate.test_connection():
+            nse = nse_candidate
+            logger.info("✅ Optimized NSE Utility initialized successfully")
+            return True
+        else:
+            logger.warning("⚠️  Optimized NSE connection test failed")
+    except Exception as e:
+        logger.warning(f"⚠️  Optimized NSE initialization failed: {e}")
+    
+    return False
 
 def init_nse_with_timeout(timeout_seconds=5):
     """Initialize NSE with timeout to prevent deployment hanging"""
