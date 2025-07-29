@@ -4,12 +4,56 @@ import yfinance as yf
 import os
 from datetime import datetime, timedelta
 import logging
+import time
+from functools import wraps
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# Simple in-memory cache for stock prices
+price_cache = {}
+CACHE_DURATION = 300  # 5 minutes cache
+
+# Rate limiting
+last_request_time = 0
+MIN_REQUEST_INTERVAL = 2  # 2 seconds between requests
+
+def rate_limit():
+    """Simple rate limiting decorator"""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            global last_request_time
+            current_time = time.time()
+            
+            # Enforce minimum interval between requests
+            time_since_last = current_time - last_request_time
+            if time_since_last < MIN_REQUEST_INTERVAL:
+                sleep_time = MIN_REQUEST_INTERVAL - time_since_last
+                logger.info(f"Rate limiting: sleeping for {sleep_time:.2f} seconds")
+                time.sleep(sleep_time)
+            
+            last_request_time = time.time()
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
+def get_cached_price(symbol):
+    """Get price from cache if available and fresh"""
+    if symbol in price_cache:
+        cached_data, timestamp = price_cache[symbol]
+        if time.time() - timestamp < CACHE_DURATION:
+            logger.info(f"Using cached price for {symbol}")
+            return cached_data
+    return None
+
+def cache_price(symbol, data):
+    """Cache price data"""
+    price_cache[symbol] = (data, time.time())
+    logger.info(f"Cached price for {symbol}")
 
 # Configure CORS with specific settings for React frontend
 # Allow both localhost (development) and production domains
@@ -43,6 +87,7 @@ def health_check():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
 @app.route('/api/stock-price/<symbol>', methods=['GET'])
+@rate_limit()
 def get_stock_price(symbol):
     """
     Get current market price for a stock symbol
@@ -56,7 +101,12 @@ def get_stock_price(symbol):
         if not symbol.endswith(('.NS', '.BO')):
             symbol = f"{symbol}.NS"
         
-        logger.info(f"Fetching price for symbol: {symbol}")
+        # Check cache first
+        cached_data = get_cached_price(symbol)
+        if cached_data:
+            return jsonify(cached_data)
+        
+        logger.info(f"Fetching fresh price for symbol: {symbol}")
         
         # Create ticker object
         ticker = yf.Ticker(symbol)
@@ -111,11 +161,24 @@ def get_stock_price(symbol):
             market_data['volume'] = info['volume']
         
         logger.info(f"Successfully fetched price for {symbol}: {current_price}")
+        
+        # Cache the result
+        cache_price(symbol, market_data)
+        
         return jsonify(market_data)
         
     except Exception as e:
-        logger.error(f"Error fetching price for {symbol}: {str(e)}")
-        return jsonify({"error": f"Failed to fetch price for {symbol}: {str(e)}"}), 500
+        error_msg = str(e)
+        logger.error(f"Error fetching price for {symbol}: {error_msg}")
+        
+        # Check if it's a rate limit error
+        if "429" in error_msg or "Too Many Requests" in error_msg:
+            return jsonify({
+                "error": f"Rate limit exceeded for {symbol}. Please try again in a few minutes.",
+                "retry_after": 300  # Suggest 5 minute retry
+            }), 429
+        
+        return jsonify({"error": f"Failed to fetch price for {symbol}: {error_msg}"}), 500
 
 @app.route('/api/stock-search/<query>', methods=['GET'])
 def search_stocks(query):
