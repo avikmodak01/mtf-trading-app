@@ -14,22 +14,53 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Initialize NSE utility (fail-safe)
+# Initialize NSE utility (fail-safe with timeout using threading)
 nse = None
+import threading
+import time
+
+def init_nse_worker():
+    """Worker function to initialize NSE"""
+    global nse
+    try:
+        logger.info("🔄 Attempting to initialize NSE Utility...")
+        import NseUtility
+        nse = NseUtility.NseUtils()
+        logger.info("✅ NSE Utility initialized successfully")
+        return True
+    except Exception as e:
+        logger.warning(f"⚠️  NSE initialization failed: {e}")
+        return False
+
+def init_nse_with_timeout(timeout_seconds=5):
+    """Initialize NSE with timeout to prevent deployment hanging"""
+    global nse
+    
+    logger.info(f"🔄 Starting NSE initialization with {timeout_seconds}s timeout...")
+    
+    # Create and start worker thread
+    worker_thread = threading.Thread(target=init_nse_worker)
+    worker_thread.daemon = True
+    worker_thread.start()
+    
+    # Wait for completion or timeout
+    worker_thread.join(timeout=timeout_seconds)
+    
+    if worker_thread.is_alive():
+        logger.warning("⚠️  NSE initialization timed out - using yfinance only")
+        logger.warning("Network connectivity issues may be preventing NSE access")
+        nse = None
+        return False
+    
+    return nse is not None
+
+# Try to initialize NSE with timeout
 try:
-    # Try to import and initialize NSE utility
-    logger.info("🔄 Attempting to initialize NSE Utility...")
-    import NseUtility
-    nse = NseUtility.NseUtils()
-    logger.info("✅ NSE Utility initialized successfully")
-    logger.info("🚀 NSE integration ready for stock price fetching")
-except ImportError as e:
-    logger.warning(f"⚠️  NSE Utility import failed: {e}")
-    logger.warning("NSE files may not be available in deployment - using yfinance only")
+    init_success = init_nse_with_timeout(timeout_seconds=8)  # 8 second timeout for deployment
+    if init_success:
+        logger.info("🚀 NSE integration ready for stock price fetching")
 except Exception as e:
-    logger.warning(f"⚠️  Failed to initialize NSE Utility: {e}")
-    logger.warning("Will continue with yfinance fallback only")
-    # Don't print full traceback in production to avoid cluttering logs
+    logger.warning(f"⚠️  NSE initialization completely failed: {e}")
 
 # Final status check
 if nse is None:
