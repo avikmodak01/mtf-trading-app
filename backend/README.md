@@ -73,12 +73,20 @@ This Python Flask backend provides real-time stock price data using the yfinance
 
 ## Features
 
-- **Real-time Data**: Fetches current market prices using yfinance
+- **NSE Integration**: Direct access to NSE APIs for real-time Indian stock data (primary source)
+- **Smart Fallback**: yfinance as backup when NSE is unavailable
+- **Rate Limiting Protection**: Avoids 429 errors with NSE primary source and caching
+- **Real-time Data**: Live market prices, VWAP, and trading information
 - **Indian Stock Support**: Automatic `.NS` suffix for NSE stocks
 - **Error Handling**: Comprehensive error handling and logging
 - **CORS Enabled**: Ready for React frontend integration
 - **Market Data**: Includes price changes, volume, and market state
 - **Search Functionality**: Search stocks by symbol or name
+- **Data Source Tracking**: API responses include source information (NSE/yfinance)
+
+## Data Sources Priority
+1. **NSE Utility** (Primary) - No rate limits, real-time NSE data
+2. **yfinance** (Fallback) - Used when NSE fails or unavailable
 
 ## Production Deployment
 
