@@ -14,24 +14,28 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Initialize NSE utility
+# Initialize NSE utility (fail-safe)
 nse = None
 try:
+    # Try to import and initialize NSE utility
+    logger.info("🔄 Attempting to initialize NSE Utility...")
     import NseUtility
     nse = NseUtility.NseUtils()
     logger.info("✅ NSE Utility initialized successfully")
-except ImportError as e:
-    logger.error(f"❌ NSE Utility import failed: {e}")
-    logger.error("NSE files may not be available in deployment")
-except Exception as e:
-    logger.error(f"❌ Failed to initialize NSE Utility: {e}")
-    import traceback
-    logger.error(f"Full traceback: {traceback.format_exc()}")
-
-if nse is None:
-    logger.warning("⚠️  NSE Utility not available - will use yfinance only")
-else:
     logger.info("🚀 NSE integration ready for stock price fetching")
+except ImportError as e:
+    logger.warning(f"⚠️  NSE Utility import failed: {e}")
+    logger.warning("NSE files may not be available in deployment - using yfinance only")
+except Exception as e:
+    logger.warning(f"⚠️  Failed to initialize NSE Utility: {e}")
+    logger.warning("Will continue with yfinance fallback only")
+    # Don't print full traceback in production to avoid cluttering logs
+
+# Final status check
+if nse is None:
+    logger.info("📊 Data Source: yfinance only (NSE unavailable)")
+else:
+    logger.info("📊 Data Sources: NSE (primary) + yfinance (fallback)")
 
 # Simple in-memory cache for stock prices
 price_cache = {}
@@ -361,8 +365,20 @@ def get_stock_history(symbol):
         return jsonify({"error": f"Failed to fetch history: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5001))  # Changed from 5000 to 5001 (macOS AirPlay conflict)
+    # Port configuration for different environments
+    port = int(os.environ.get('PORT', 5001))  # Render uses PORT env var, default 5001 for local
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
-    logger.info(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    # Ensure NSE status is logged for deployment debugging
+    nse_status = "✅ Available" if nse is not None else "⚠️  Not Available"
+    logger.info(f"🚀 Starting Flask server on port {port}")
+    logger.info(f"📊 NSE Integration: {nse_status}")
+    logger.info(f"🔍 Debug mode: {debug}")
+    
+    try:
+        app.run(host='0.0.0.0', port=port, debug=debug)
+    except Exception as e:
+        logger.error(f"❌ Failed to start server: {e}")
+        # Even if NSE fails, we should still start the server
+        logger.info("🔄 Starting server without NSE...")
+        app.run(host='0.0.0.0', port=port, debug=False)
