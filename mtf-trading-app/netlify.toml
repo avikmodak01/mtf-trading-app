@@ -1,0 +1,16 @@
+[build]
+  publish = "build"
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Environment variables will need to be set in Netlify dashboard:
+# REACT_APP_SUPABASE_URL = your_supabase_url
+# REACT_APP_SUPABASE_ANON_KEY = your_supabase_anon_key  
+# REACT_APP_STOCK_API_URL = your_production_backend_url
