@@ -54,8 +54,8 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔄 Auth state changed:', event);
-        // Only handle sign out events to avoid duplicate loading
-        if (!session?.user && user) {
+        
+        if (event === 'SIGNED_OUT') {
           console.log('User logged out');
           setUser(null);
           setTrades([]);
@@ -63,11 +63,12 @@ function App() {
           setConfiguration(null);
           setLoading(false);
         }
+        // Note: SIGNED_IN is handled by the initial auth check above
       }
     );
 
     return () => subscription?.unsubscribe();
-  }, [user]);
+  }, []); // Remove user dependency to prevent infinite loop
 
   const loadUserData = async (userId: string) => {
     console.log('Loading user data for:', userId);
