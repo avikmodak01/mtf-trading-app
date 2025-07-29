@@ -15,12 +15,23 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Initialize NSE utility
+nse = None
 try:
+    import NseUtility
     nse = NseUtility.NseUtils()
-    logger.info("NSE Utility initialized successfully")
+    logger.info("✅ NSE Utility initialized successfully")
+except ImportError as e:
+    logger.error(f"❌ NSE Utility import failed: {e}")
+    logger.error("NSE files may not be available in deployment")
 except Exception as e:
-    logger.error(f"Failed to initialize NSE Utility: {e}")
-    nse = None
+    logger.error(f"❌ Failed to initialize NSE Utility: {e}")
+    import traceback
+    logger.error(f"Full traceback: {traceback.format_exc()}")
+
+if nse is None:
+    logger.warning("⚠️  NSE Utility not available - will use yfinance only")
+else:
+    logger.info("🚀 NSE integration ready for stock price fetching")
 
 # Simple in-memory cache for stock prices
 price_cache = {}
@@ -142,7 +153,12 @@ CORS(app, resources={
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+    return jsonify({
+        "status": "healthy", 
+        "timestamp": datetime.now().isoformat(),
+        "nse_available": nse is not None,
+        "data_sources": ["nse", "yfinance"] if nse else ["yfinance"]
+    })
 
 @app.route('/api/stock-price/<symbol>', methods=['GET'])
 @rate_limit()
